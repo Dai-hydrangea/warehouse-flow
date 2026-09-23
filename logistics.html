@@ -93,8 +93,8 @@
   </div>
   <div class="mstrip">
     <div class="metric"><span class="k">🕐時刻</span><span class="v" id="m_clock">–</span></div>
-    <div class="metric"><span class="k">入荷IN/s</span><span class="v" style="color:var(--in)" id="m_in">–</span></div>
-    <div class="metric"><span class="k">出荷OUT/s</span><span class="v" style="color:var(--out)" id="m_out">–</span></div>
+    <div class="metric"><span class="k">入荷IN/分</span><span class="v" style="color:var(--in)" id="m_in">–</span></div>
+    <div class="metric"><span class="k">出荷OUT/分</span><span class="v" style="color:var(--out)" id="m_out">–</span></div>
     <div class="metric"><span class="k">保管</span><span class="v" style="color:var(--store)" id="m_store">–</span></div>
     <div class="metric"><span class="k">📦率</span><span class="v" id="m_occ">–</span></div>
     <div class="metric"><span class="k">未処理注文</span><span class="v" id="m_ord">–</span></div>
@@ -110,7 +110,7 @@
     <summary>選択工程 ▸ <span id="ename">ピック</span> <span id="epool" style="color:var(--dim);font-weight:600"></span></summary>
     <div class="cardbody">
       <div class="sld"><label>人員 <b id="ev_lines"></b></label><input type="range" id="e_lines" min="1" max="16" step="1" value="4"><div class="cap">この工程の担当人数（他工程から取る）</div></div>
-      <div class="sld"><label>能力/人 <b id="ev_rate"></b></label><input type="range" id="e_rate" min="2" max="60" step="1" value="10"><div class="cap">1人が1秒で捌ける数</div></div>
+      <div class="sld"><label>能力/人 <b id="ev_rate"></b></label><input type="range" id="e_rate" min="2" max="60" step="1" value="10"><div class="cap">1人が1分で捌ける数</div></div>
       <div class="sld" id="e_dest_wrap"><label>行き先/ライン <b id="ev_dest"></b></label><input type="range" id="e_dest" min="1" max="20" step="1" value="6"><div class="cap">仕分け先の数。多いほど1個が遅くなる</div></div>
       <div class="sld"><label>実効能力 / 稼働 / WIP</label><b id="e_stats" style="font-size:13px;color:var(--ink)">–</b><div class="cap">この工程の 能力・稼働率・たまり（工程はキャンバスをタップで選択）</div></div>
     </div>
@@ -119,12 +119,12 @@
   <details class="card" open>
     <summary>全体の設定</summary>
     <div class="cardbody">
-      <div class="sld"><label>注文数 <b id="v_ord"></b></label><input type="range" id="s_ord" min="1" max="30" step="1" value="4"><div class="cap">≒1秒あたりの出荷（個/秒）。入荷量と同じ値で釣り合う</div></div>
-      <div class="sld"><label>入荷量 <b id="v_inb"></b></label><input type="range" id="s_inb" min="1" max="30" step="1" value="4"><div class="cap">≒1秒あたりの入荷（個/秒）。朝夕にピーク。注文数と同値で釣り合う</div></div>
+      <div class="sld"><label>注文数 <b id="v_ord"></b></label><input type="range" id="s_ord" min="1" max="30" step="1" value="4"><div class="cap">≒1分あたりの出荷（個/分）。入荷量と同じ値で釣り合う</div></div>
+      <div class="sld"><label>入荷量 <b id="v_inb"></b></label><input type="range" id="s_inb" min="1" max="30" step="1" value="4"><div class="cap">≒1分あたりの入荷（個/分）。朝夕にピーク。注文数と同値で釣り合う</div></div>
       <div class="sld"><label>入荷ピーク位置 <b id="v_pk"></b></label><input type="range" id="s_pk" min="0" max="100" step="1" value="33"><div class="cap">トラックが集中する時刻をずらす</div></div>
       <div class="sld"><label>時間の速さ <b id="v_spd"></b></label><input type="range" id="s_spd" min="1" max="40" step="1" value="14"><div class="cap">左に振るとスロー再生（瞬間の動きをじっくり）／右で早送り</div></div>
       <div class="sld"><label>👷 総人員 <b id="v_staff"></b></label><input type="range" id="s_staff" min="9" max="60" step="1" value="28"><div class="cap">配置できる人の総数。工程間で取り合う（自動最適化ONだと自動で増減）</div></div>
-      <div class="sld"><label>📦 保管容量 <b id="v_cap"></b></label><input type="range" id="s_cap" min="100" max="3000" step="50" value="600"><div class="cap">棚の最大数。満杯だと棚入れが止まる</div></div>
+      <div class="sld"><label>📦 保管容量 <b id="v_cap"></b></label><input type="range" id="s_cap" min="500" max="8000" step="100" value="3000"><div class="cap">棚の最大数。満杯だと棚入れが止まる</div></div>
     </div>
   </details>
 
@@ -166,7 +166,7 @@
         <div class="kpi">
           <div class="ki"><span>注文充足率</span><b id="k_fill">–</b></div>
           <div class="ki"><span>リードタイム</span><b id="k_lt">–</b></div>
-          <div class="ki"><span>生産性 個/人·分</span><b id="k_prod">–</b></div>
+          <div class="ki"><span>生産性 個/人·時</span><b id="k_prod">–</b></div>
           <div class="ki"><span>欠品 / あふれ</span><b id="k_evt">–</b></div>
         </div>
       </div>
@@ -234,14 +234,15 @@ const STAGEHIST=60;
 const order=['TRUCKIN','recv','unpack','putaway','STORE','pick','induct','pack','transp','sort','dock','TRUCKOUT'];
 
 // ---- state ----
-let simTime=0, storedLevel=220, orderQueue=0, inAcc=0, ordAcc=0;
+const DAY=1440;   // 1目盛=1分、1日=1440分（時計と処理能力/分を同じ時間軸に統一）
+let simTime=0, storedLevel=1200, orderQueue=0, inAcc=0, ordAcc=0;
 let inCount=0, outCount=0, inWin=[], outWin=[], hist=[], sampleAcc=0;
 const HISTMAX=140;
 let movers=[]; // {x,y,tx,ty,t,dur,col,deliver}
 let truckInFlash=0, truckOutFlash=0, bnId='';
-let stockoutCount=0, overflowCount=0, prevStore=120;   // KPI: 欠品/あふれ回数
+let stockoutCount=0, overflowCount=0, prevStore=1200;   // KPI: 欠品/あふれ回数
 let toast=null;                                        // 一時的なスパイク投入の吹き出し
-let cfg={ord:4, inb:4, peak:0.33, speed:14, staff:28, cap:600, auto:false};
+let cfg={ord:4, inb:4, peak:0.33, speed:14, staff:28, cap:3000, auto:false};
 const DEFAULTS=JSON.stringify({cfg, stages:stages.map(s=>({id:s.id,lines:s.lines,rate:s.rate,dest:s.dest}))});
 const SAVEKEY='warehouse_flow_v1';
 function sumLines(){let n=0;for(const s of stages)n+=s.lines;return n;}
@@ -326,7 +327,7 @@ function posOf(id){
 }
 function spawnMover(fromId,toId,col,deliver){
   const a=posOf(fromId),b=posOf(toId),d=Math.hypot(b.x-a.x,b.y-a.y);
-  movers.push({sx:a.x,sy:a.y,x:a.x,y:a.y,tx:b.x,ty:b.y,t:0,dur:Math.max(.25,d/320),col,deliver});
+  movers.push({sx:a.x,sy:a.y,x:a.x,y:a.y,tx:b.x,ty:b.y,t:0,dur:Math.max(4,d/40),col,deliver});
   if(movers.length>1200)movers.splice(0,200);
 }
 
@@ -339,7 +340,7 @@ function onComplete(s){
 
 function step(dt){
   simTime+=dt;
-  const tod=(simTime/24)%1; // 24s = 1 day
+  const tod=(simTime%DAY)/DAY; // 1日=1440分
   // demand waves + smoothed estimate for the optimizer
   const instIn=cfg.inb*arrivalMult(tod)*1.0, instOut=cfg.ord*orderMult(tod);  // 両者とも平均≒スライダー値(個/秒)
   demIn+=(instIn-demIn)*Math.min(1,dt*0.5); demOut+=(instOut-demOut)*Math.min(1,dt*0.5);
@@ -374,8 +375,8 @@ function step(dt){
     if(m.t>=m.dur){m.deliver();movers.splice(i,1);}
     else{const k=m.t/m.dur;m.x=m.sx+(m.tx-m.sx)*k;m.y=m.sy+(m.ty-m.sy)*k;}
   }
-  truckInFlash=Math.max(0,truckInFlash-dt*2);truckOutFlash=Math.max(0,truckOutFlash-dt*2);
-  if(toast){toast.t+=dt;if(toast.t>1.5)toast=null;}
+  truckInFlash=Math.max(0,truckInFlash-0.04);truckOutFlash=Math.max(0,truckOutFlash-0.04);  // 実時間で減衰(dtに依存しない)
+  if(toast){toast.t+=1;if(toast.t>75)toast=null;}
 
   // bottleneck = highest buffer among processing stages (or starved pick)
   let mx=-1;bnId='';for(const s of stages){const load=s.buf+(s.kind==='pick'?0:0);if(load>mx){mx=load;bnId=s.id;}}
@@ -430,7 +431,7 @@ function drawStage(s){
   ctx.fillStyle=hexA(col,1);ctx.textAlign='center';
   fitText(s.jp,s.bx+s.bw/2,s.by+18,s.bw-10,'800',16);
   ctx.fillStyle=C('--ink');
-  fitText('能力 '+(s.lines*s.rate).toFixed(1)+'/s',s.bx+s.bw/2,s.by+s.bh-8,s.bw-10,'700',13);
+  fitText('能力 '+(s.lines*s.rate).toFixed(1)+'/分',s.bx+s.bw/2,s.by+s.bh-8,s.bw-10,'700',13);
   // line lanes (busy lit)
   const lanes=s.lines, laneY0=s.by+24, laneH=(s.bh-42)/Math.max(1,lanes);
   for(let i=0;i<lanes;i++){const y=laneY0+i*laneH+1;const busy=i<s.servers.length;
@@ -474,7 +475,7 @@ function drawStageV(s){       // 縦(スマホ)レイアウト用: 横長の行
   ctx.fillStyle=hexA(col,1);ctx.textAlign='left';
   fitText(s.jp,s.bx+10,midy-2,s.bw*0.42,'800',15);
   ctx.fillStyle=C('--ink');
-  fitText((s.lines*s.rate).toFixed(1)+'/s'+(s.buf>0?'  WIP'+s.buf:''),s.bx+10,midy+15,s.bw*0.42,'700',11);
+  fitText((s.lines*s.rate).toFixed(1)+'/分'+(s.buf>0?'  WIP'+s.buf:''),s.bx+10,midy+15,s.bw*0.42,'700',11);
   // lanes as vertical bars (right portion)
   const lx=s.bx+s.bw*0.48, lw=s.bw*0.5, lanes=s.lines, bwc=lw/Math.max(1,lanes);
   for(let i=0;i<lanes;i++){const busy=i<s.servers.length;
@@ -538,7 +539,7 @@ function render(){
   for(const m of movers){ctx.fillStyle=hexA(m.col,0.9);ctx.beginPath();ctx.arc(m.x,m.y,2.6,0,7);ctx.fill();}
 
   // top-center: 1-day demand profiles (入荷量 上 / 注文量 下) — different phases
-  const tod=(simTime/24)%1;
+  const tod=(simTime%DAY)/DAY;
   if(!vertical){
   const cwd=224, cx=W/2-cwd/2, ch2=20, gp=12;
   const rows=[
@@ -557,7 +558,7 @@ function render(){
   }
 
   // spike toast (large, fades)
-  if(toast){const a=Math.max(0,1-toast.t/1.5), yy=(vertical?H*0.42:midY)-40-toast.t*30;
+  if(toast){const a=Math.max(0,1-toast.t/75), yy=(vertical?H*0.42:midY)-40-toast.t*0.6;
     ctx.globalAlpha=a;ctx.fillStyle=C(toast.col);ctx.font='800 28px sans-serif';ctx.textAlign='center';
     ctx.fillText(toast.txt,W/2,yy);ctx.globalAlpha=1;}
 }
@@ -586,9 +587,9 @@ let last=performance.now();
 function frame(now){
  try{
   let dt=(now-last)/1000;last=now;if(dt>0.05)dt=0.05;
-  dt*=cfg.speed/14;                      // time-speed multiplier
+  dt*=cfg.speed/14*8;                    // time-speed (simTimeは分。1日=1440分を既定~60秒で回す)
   step(dt);render();drawGraph();
-  set('m_clock',String(Math.floor((simTime/24%1)*24)).padStart(2,'0')+':'+String(Math.floor(((simTime/24%1)*24%1)*60)).padStart(2,'0'));
+  set('m_clock',String(Math.floor(simTime/60)%24).padStart(2,'0')+':'+String(Math.floor(simTime)%60).padStart(2,'0'));
   set('m_in',inWin.length);set('m_out',outWin.length);set('m_store',storedLevel);set('m_ord',orderQueue);
   set('m_occ',Math.round(Math.min(1,storedLevel/cfg.cap)*100)+'%'+(storedLevel>=cfg.cap?' ⚠満杯':''));
   set('m_bn',bnId?byId[bnId].jp:'—');
@@ -600,16 +601,16 @@ function frame(now){
   const lt=owip/Math.max(0.3,outR);                            // リトルの法則 L=λW → W=L/λ
   const prod=outR*60/Math.max(1,sumLines());                   // 1人あたり出荷/分
   const kf=document.getElementById('k_fill');kf.textContent=Math.round(fill)+'%';kf.style.color=fill<80?C('--hot'):C('--head');
-  set('k_lt',lt.toFixed(1)+'s'); set('k_prod',prod.toFixed(1));
+  set('k_lt',lt.toFixed(0)+'分'); set('k_prod',prod.toFixed(1));
   const ke=document.getElementById('k_evt');ke.textContent=stockoutCount+' / '+overflowCount;
   ke.style.color=(stockoutCount||overflowCount)?C('--hot'):C('--head');
   // live "現在" row of the comparison table
   const cur=summary(stages.map(s=>s.lines));
-  set('c0cap',cur.cap.toFixed(1)+'/s');set('c0fill',Math.round(cur.fill)+'%');set('c0bn',cur.bn||'—');
+  set('c0cap',cur.cap.toFixed(1)+'/分');set('c0fill',Math.round(cur.fill)+'%');set('c0bn',cur.bn||'—');
   const alloc=sumLines(),free=cfg.staff-alloc,ms=document.getElementById('m_staff');
   ms.textContent=alloc+'/'+cfg.staff+(free<0?' ⚠超過':'');
   ms.style.color=free<0?C('--hot'):(free>0?C('--ok'):C('--ink'));
-  set('e_stats',(sel.lines*sel.rate).toFixed(1)+'/s ｜ 稼働'+Math.round(sel.util*100)+'% ｜ WIP '+sel.buf);
+  set('e_stats',(sel.lines*sel.rate).toFixed(1)+'/分 ｜ 稼働'+Math.round(sel.util*100)+'% ｜ WIP '+sel.buf);
  }catch(e){
   const d=document.getElementById('err');
   if(d){d.style.display='block';d.textContent='⚠ '+ (e&&e.message||e) +'\n'+((e&&e.stack||'').split('\n').slice(0,4).join('\n'));}
@@ -675,7 +676,7 @@ function refreshEditor(){
   document.getElementById('epool').textContent='｜残り人員 '+(cfg.staff-sumLines())+'人';
   const l=document.getElementById('e_lines'),r=document.getElementById('e_rate');
   l.value=sel.lines;document.getElementById('ev_lines').textContent=sel.lines+'人';
-  r.value=Math.round(sel.rate*10);document.getElementById('ev_rate').textContent=sel.rate.toFixed(1)+'/s';
+  r.value=Math.round(sel.rate*10);document.getElementById('ev_rate').textContent=sel.rate.toFixed(1)+'/分';
   const dw=document.getElementById('e_dest_wrap');
   if(sel.dest!=null){dw.style.display='';const d=document.getElementById('e_dest');
     d.value=sel.dest;document.getElementById('ev_dest').textContent=sel.dest;}
@@ -693,7 +694,7 @@ document.getElementById('e_lines').addEventListener('input',e=>{
   }else sel.lines=Math.max(1,want);
   e.target.value=sel.lines;refreshEditor();
 });
-document.getElementById('e_rate').addEventListener('input',e=>{sel.rate=(+e.target.value)/10;document.getElementById('ev_rate').textContent=sel.rate.toFixed(1)+'/s';});
+document.getElementById('e_rate').addEventListener('input',e=>{sel.rate=(+e.target.value)/10;document.getElementById('ev_rate').textContent=sel.rate.toFixed(1)+'/分';});
 document.getElementById('e_dest').addEventListener('input',e=>{sel.dest=+e.target.value;document.getElementById('ev_dest').textContent=sel.dest;});
 cv.addEventListener('click',ev=>{const r=cv.getBoundingClientRect();const mx=ev.clientX-r.left,my=ev.clientY-r.top;
   for(const s of stages){if(mx>=s.bx&&mx<=s.bx+s.bw&&my>=s.by&&my<=s.by+s.bh){sel=s;refreshEditor();break;}}});
@@ -701,7 +702,7 @@ document.getElementById('b_spin').addEventListener('click',()=>{byId.recv.buf+=8
 document.getElementById('b_spout').addEventListener('click',()=>{orderQueue+=80;toast={txt:'🛒 注文 +80',t:0,col:'var(--out)'};});
 document.getElementById('b_prop').addEventListener('click',()=>{        // 試算(適用しない): 提案配置のKPIを表示
   proposedAlloc=optimalAlloc();const pr=summary(proposedAlloc);
-  set('c1cap',pr.cap.toFixed(1)+'/s');set('c1fill',Math.round(pr.fill)+'%');set('c1bn',pr.bn||'—');
+  set('c1cap',pr.cap.toFixed(1)+'/分');set('c1fill',Math.round(pr.fill)+'%');set('c1bn',pr.bn||'—');
 });
 document.getElementById('b_apply').addEventListener('click',()=>{      // 適用
   if(!proposedAlloc)proposedAlloc=optimalAlloc();
