@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Warehouse in the Shell — 倉庫 = CPU</title>
+<style>
+  :root{
+    --bg:#05070d; --grid:#0e1622; --ink:#cfe8ff; --dim:#5b7089;
+    --l1:#2effc2; --l2:#3aa0ff; --deep:#7a63ff; --hit:#37ffa8; --miss:#ff5a6e;
+    --write:#dff1ff; --accent:#ffcb47; --cpu:#ff9d5c; --io:#8affd1; --pf:#ff6ff5;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Segoe UI",sans-serif;overflow:hidden;}
+  #cv{display:block;position:fixed;inset:0;}
+  .panel{position:fixed;backdrop-filter:blur(6px);background:rgba(8,12,20,.62);
+    border:1px solid rgba(80,120,170,.25);border-radius:12px;padding:12px 14px;}
+  #hud{top:12px;left:12px;min-width:210px;}
+  #hud h1{margin:0 0 2px;font-size:13px;letter-spacing:.04em;color:var(--accent);font-weight:700;}
+  #hud .sub{font-size:10px;color:var(--dim);margin-bottom:10px;letter-spacing:.02em;}
+  .metric{display:flex;justify-content:space-between;align-items:baseline;
+    font-size:11px;padding:3px 0;border-bottom:1px dashed rgba(80,120,170,.15);}
+  .metric .k{color:var(--dim);}
+  .metric .v{font-variant-numeric:tabular-nums;font-weight:600;font-size:13px;}
+  .metric .u{font-size:9px;color:var(--dim);margin-left:3px;}
+  #ctrl{bottom:12px;left:12px;right:12px;display:flex;gap:18px;flex-wrap:wrap;align-items:center;}
+  .sld{flex:1 1 170px;min-width:140px;}
+  .sld label{display:flex;justify-content:space-between;font-size:10px;color:var(--dim);margin-bottom:4px;}
+  .sld label b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums;}
+  .sld label .c{color:var(--l1);}
+  input[type=range]{width:100%;-webkit-appearance:none;height:4px;border-radius:4px;
+    background:linear-gradient(90deg,var(--l2),var(--l1));outline:none;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;
+    background:var(--ink);border:2px solid var(--l1);cursor:pointer;box-shadow:0 0 8px rgba(46,255,194,.6);}
+  #legend{top:12px;right:12px;font-size:10px;line-height:1.7;text-align:right;}
+  #legend .row{display:flex;justify-content:flex-end;align-items:center;gap:6px;}
+  #legend .sw{width:10px;height:10px;border-radius:2px;display:inline-block;}
+  #legend .d{color:var(--dim);}
+  #graph{bottom:96px;right:12px;width:284px;}
+  #graph .gh{font-size:10px;color:var(--dim);margin-bottom:5px;letter-spacing:.03em;}
+  #graph .gc{display:flex;gap:12px;font-size:10px;margin-bottom:6px;}
+  #graph .gc b{font-variant-numeric:tabular-nums;font-weight:700;}
+  #gcv{display:block;width:260px;height:110px;}
+  @media(max-width:720px){#legend,#graph{display:none;} #hud{min-width:170px;} }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<div class="panel" id="hud">
+  <h1>WAREHOUSE IN THE SHELL</h1>
+  <div class="sub">倉庫を CPU として眺める · 種プロト</div>
+  <div class="metric"><span class="k">ヒット率 <span style="color:var(--l1)">cache</span></span><span><span class="v" id="m_hit">–</span><span class="u">%</span></span></div>
+  <div class="metric"><span class="k">平均レイテンシ <span style="color:var(--l1)">latency</span></span><span><span class="v" id="m_lat">–</span><span class="u">s</span></span></div>
+  <div class="metric"><span class="k">スループット <span style="color:var(--l1)">出庫/s</span></span><span><span class="v" id="m_thr">–</span><span class="u">/s</span></span></div>
+  <div class="metric"><span class="k">命令キュー <span style="color:var(--l1)">queue</span></span><span><span class="v" id="m_q">–</span></span></div>
+  <div class="metric"><span class="k">稼働 <span style="color:var(--l1)">util</span></span><span><span class="v" id="m_util">–</span><span class="u">%</span></span></div>
+  <div class="metric"><span class="k">バス <span style="color:var(--l1)">bus</span></span><span><span class="v" id="m_bus">–</span></span></div>
+  <div class="metric" style="border-bottom:none"><span class="k">温度 <span style="color:var(--l1)">thermal</span></span><span><span class="v" id="m_temp">–</span><span class="u">°</span></span></div>
+</div>
+
+<div class="panel" id="legend">
+  <div class="row"><span>I/O ポート · 入出庫</span><span class="sw" style="background:var(--io)"></span></div>
+  <div class="row"><span>CPU · コントローラ</span><span class="sw" style="background:var(--cpu)"></span></div>
+  <div class="row"><span>L1 · フォワードピック</span><span class="sw" style="background:var(--l1)"></span></div>
+  <div class="row"><span>L2 · リザーブ棚</span><span class="sw" style="background:var(--l2)"></span></div>
+  <div class="row"><span>深部 · オーバーフロー</span><span class="sw" style="background:var(--deep)"></span></div>
+  <div class="row d"><span>金=出庫pick / 白=入庫write</span></div>
+  <div class="row d"><span>緑=ヒット / 赤=ミス</span></div>
+</div>
+
+<div class="panel" id="graph">
+  <div class="gh">時間ごとの流量 (直近 ~56s)</div>
+  <div class="gc">
+    <span style="color:var(--io)">IN <b id="g_in">0</b></span>
+    <span style="color:var(--accent)">OUT <b id="g_out">0</b></span>
+    <span style="color:var(--deep)">保管 <b id="g_st">0</b></span>
+  </div>
+  <div class="gc">
+    <span style="color:var(--cpu)">温度 <b id="g_tp">0</b></span>
+    <span style="color:var(--ink)">遅延 <b id="g_lt">0</b>s</span>
+  </div>
+  <canvas id="gcv"></canvas>
+</div>
+
+<div class="panel" id="ctrl">
+  <div class="sld"><label>クロック <span class="c">clock · 注文/秒</span><b id="v_rate"></b></label><input type="range" id="s_rate" min="1" max="24" step="1" value="4"></div>
+  <div class="sld"><label>コア数 <span class="c">cores · ピッカー</span><b id="v_cores"></b></label><input type="range" id="s_cores" min="1" max="28" step="1" value="14"></div>
+  <div class="sld"><label>L1キャッシュ <span class="c">前線の列数</span><b id="v_l1"></b></label><input type="range" id="s_l1" min="1" max="10" step="1" value="4"></div>
+  <div class="sld"><label>スロッティング <span class="c">slotting · 局所性</span><b id="v_slot"></b></label><input type="range" id="s_slot" min="0" max="100" step="1" value="70"></div>
+  <div class="sld"><label>バス幅 <span class="c">帯域 · 同時通過</span><b id="v_bus"></b></label><input type="range" id="s_bus" min="2" max="16" step="1" value="7"></div>
+  <div class="sld"><label>プリフェッチ <span class="c">先読み補充</span><b id="v_pf"></b></label><input type="range" id="s_pf" min="0" max="100" step="1" value="50"></div>
+</div>
+
+<script>
+"use strict";
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+let W=0,H=0,DPR=Math.min(2,window.devicePixelRatio||1);
+
+// ---- logical grid (external memory: shelves) ----
+const COLS=26, ROWS=16, N=COLS*ROWS;
+const cells=[];              // one SKU per cell
+let rankToCell=[];
+let cfg={rate:4,cores:14,l1cols:4,slot:0.7,prefetch:0.5};
+
+// popularity: Zipf
+const zipfS=1.05, zipfW=[]; let zipfTot=0;
+for(let i=0;i<N;i++){const w=1/Math.pow(i+1,zipfS);zipfW.push(w);zipfTot+=w;}
+function pickRank(){let r=Math.random()*zipfTot;for(let i=0;i<N;i++){r-=zipfW[i];if(r<=0)return i;}return N-1;}
+
+function bandCols(){const l1=cfg.l1cols,l2=Math.round((COLS-l1)*0.4);return{l1,l2};}
+function initGrid(){
+  cells.length=0;
+  for(let gy=0;gy<ROWS;gy++)for(let gx=0;gx<COLS;gx++){
+    // distance from bus/CPU = column index (near bus = fast = L1)
+    cells.push({gx,gy,dist:gx+Math.abs(gy-(ROWS-1)/2)*0.02,rank:0,band:2,flash:0,fcol:null});
+  }
+  reslot();
+}
+function reslot(){
+  const byDist=[...cells.keys()].sort((a,b)=>cells[a].dist-cells[b].dist);
+  const rankOf=new Array(cells.length);
+  for(let i=0;i<byDist.length;i++)rankOf[byDist[i]]=i;
+  const swaps=Math.floor((1-cfg.slot)*cells.length*1.5);
+  for(let s=0;s<swaps;s++){const a=(Math.random()*cells.length)|0,b=(Math.random()*cells.length)|0;
+    const t=rankOf[a];rankOf[a]=rankOf[b];rankOf[b]=t;}
+  rankToCell=new Array(cells.length);
+  for(let i=0;i<cells.length;i++){cells[i].rank=rankOf[i];rankToCell[rankOf[i]]=i;}
+  markBands();
+}
+function markBands(){const{l1,l2}=bandCols();for(const c of cells)c.band=c.gx<l1?0:(c.gx<l1+l2?1:2);}
+function findPrefetch(){
+  // most-popular SKU not yet in L1 -> promote into worst L1 slot (cache line fill)
+  let src=-1;
+  for(let r=0;r<Math.min(N,240);r++){const cell=rankToCell[r];if(cells[cell].band!==0){src=cell;break;}}
+  if(src<0)return null;
+  let dst=-1,worst=-1;
+  for(let i=0;i<cells.length;i++){const c=cells[i];if(c.band===0&&c.rank>worst){worst=c.rank;dst=i;}}
+  if(dst<0||cells[src].rank>=worst)return null;
+  return {src,dst};
+}
+
+// ---- geometry (die floorplan) ----
+let box={x:0,y:0,w:0,h:0,cw:0};
+let busX=0,busTop=0,busBot=0;
+let cpuRect={},ioInRect={},ioOutRect={};
+let cpuPort={x:0,y:0},ioInPort={x:0,y:0},ioOutPort={x:0,y:0};
+function sx(gx){return box.x+gx*box.cw+box.cw/2;}
+function sy(gy){return box.y+gy*box.cw+box.cw/2;}
+
+// ---- pickers (cores) : outbound READ/pick, pixel-space ----
+let pickers=[];
+function setCores(n){pickers=[];for(let i=0;i<n;i++)pickers.push({state:'idle',x:cpuPort.x,y:cpuPort.y,wp:[],order:null,trail:[]});}
+
+// ---- inbound WRITE particles ----
+let inbound=[]; let inAcc=0;
+
+// ---- orders (instruction queue) ----
+let queue=[], spawnAcc=0, simTime=0;
+let mHit=0,mMiss=0,latSum=0,latCount=0,doneWindow=[],hitRate=0,temp=20;
+// flow counters + time series
+let inCount=0,outCount=0,storedLevel=150,inWin=[],outWin=[],latWin=[],hist=[],sampleAcc=0;
+const HISTMAX=140;
+let gBus={on:0,cap:7,thr:1};
+
+function spawnOrder(){const rank=pickRank();queue.push({rank,cell:rankToCell[rank],t:simTime});if(queue.length>500)queue.shift();}
+function spawnInbound(){
+  if(inbound.length>140)return;
+  const cell=rankToCell[pickRank()];       // received stock slotted by popularity
+  inbound.push({state:'toCPU',x:ioInRect.x+ioInRect.w,y:ioInPort.y,
+    wp:[{x:busX,y:ioInPort.y},{x:busX,y:cpuPort.y}],cell,dwell:0,trail:[]});
+}
+function assign(){
+  for(const p of pickers){
+    if(p.state==='idle'&&queue.length){
+      const o=queue.shift();p.order=o;p.state='toShelf';
+      const c=cells[o.cell];
+      // CPU issues pick -> ride bus to shelf row -> aisle to shelf
+      p.wp=[{x:busX,y:sy(c.gy)},{x:sx(c.gx),y:sy(c.gy)}];
+    }
+  }
+}
+function moveAlong(o,mv){ // returns true if all waypoints consumed this frame
+  while(mv>0&&o.wp.length){
+    const w=o.wp[0],dx=w.x-o.x,dy=w.y-o.y,d=Math.hypot(dx,dy);
+    if(d<=mv){o.x=w.x;o.y=w.y;mv-=d;o.wp.shift();}
+    else{o.x+=dx/d*mv;o.y+=dy/d*mv;mv=0;}
+  }
+  return o.wp.length===0;
+}
+
+function step(dt){
+  simTime+=dt;
+  spawnAcc+=cfg.rate*dt; while(spawnAcc>=1){spawnOrder();spawnAcc-=1;}
+  inAcc+=cfg.rate*0.8*dt; while(inAcc>=1){spawnInbound();inAcc-=1;}
+  assign();
+
+  // bus arbitration: shared channel, limited concurrent bandwidth
+  gBus.on=0;
+  for(const p of pickers)if(p.state!=='idle'&&Math.abs(p.x-busX)<box.cw*0.5)gBus.on++;
+  for(const o of inbound)if(o.state!=='dwell'&&Math.abs(o.x-busX)<box.cw*0.5)gBus.on++;
+  gBus.thr=gBus.on>gBus.cap?gBus.cap/gBus.on:1;
+
+  // prefetch: spare cores promote popular SKUs deep->L1 during idle time
+  if(cfg.prefetch>0 && queue.length<=1){
+    const p=pickers.find(q=>q.state==='idle');
+    if(p && Math.random()<cfg.prefetch*0.5){
+      const pf=findPrefetch();
+      if(pf){const c=cells[pf.src];p.state='pfSrc';p.pf=pf;
+        p.wp=[{x:busX,y:sy(c.gy)},{x:sx(c.gx),y:sy(c.gy)}];}
+    }
+  }
+
+  const busy=pickers.filter(p=>p.state!=='idle').length;
+  const util=pickers.length?busy/pickers.length:0;
+  // temp driven by utilization ONLY (queue must never latch the throttle)
+  const targetTemp=20+util*70;
+  temp+=(targetTemp-temp)*Math.min(1,dt*0.8);
+  const throttle=temp>72?Math.max(0.65,1-(temp-72)/90):1;
+  const sp=26*box.cw*throttle, spIn=22*box.cw*throttle;
+
+  // outbound pickers
+  for(const p of pickers){
+    if(p.state==='idle')continue;
+    const nb=Math.abs(p.x-busX)<box.cw*0.5;
+    if(moveAlong(p,(nb?gBus.thr:1)*sp*dt)){
+      if(p.state==='toShelf'){
+        const c=cells[p.order.cell],hit=c.band===0;
+        c.flash=1;c.fcol=hit?'hit':'miss';if(hit)mHit++;else mMiss++;
+        // memory -> bus -> I/O OUT (ship)
+        p.state='toOut';p.wp=[{x:busX,y:p.y},{x:busX,y:ioOutPort.y},{x:ioOutRect.x+ioOutRect.w,y:ioOutPort.y}];
+      }else if(p.state==='toOut'){ // shipped
+        const lat=simTime-p.order.t;
+        latSum+=lat;latCount++;doneWindow.push(simTime);latWin.push({t:simTime,lat});
+        outCount++;storedLevel=Math.max(0,storedLevel-1);outWin.push(simTime);
+        p.order=null;p.state='idle';p.x=cpuPort.x;p.y=cpuPort.y;p.trail.length=0;
+      }else if(p.state==='pfSrc'){ // reached source -> carry to L1
+        cells[p.pf.src].flash=1;cells[p.pf.src].fcol='pf';
+        const d=cells[p.pf.dst];
+        p.state='pfDst';p.wp=[{x:busX,y:p.y},{x:busX,y:sy(d.gy)},{x:sx(d.gx),y:sy(d.gy)}];
+      }else{ // pfDst: swap ranks = promote popular SKU into L1 (cache line fill)
+        const s=p.pf.src,d=p.pf.dst,rs=cells[s].rank,rd=cells[d].rank;
+        cells[s].rank=rd;cells[d].rank=rs;rankToCell[rs]=d;rankToCell[rd]=s;
+        cells[d].flash=1;cells[d].fcol='pf';
+        p.pf=null;p.state='idle';p.x=cpuPort.x;p.y=cpuPort.y;p.trail.length=0;
+      }
+    }
+    p.trail.push({x:p.x,y:p.y});if(p.trail.length>16)p.trail.shift();
+  }
+  // inbound writes
+  for(let i=inbound.length-1;i>=0;i--){
+    const o=inbound[i];
+    if(o.state==='dwell'){o.dwell-=dt;if(o.dwell<=0){const c=cells[o.cell];o.state='toShelf';o.wp=[{x:busX,y:sy(c.gy)},{x:sx(c.gx),y:sy(c.gy)}];}
+      o.trail.push({x:o.x,y:o.y});if(o.trail.length>16)o.trail.shift();continue;}
+    const nb=Math.abs(o.x-busX)<box.cw*0.5;
+    if(moveAlong(o,(nb?gBus.thr:1)*spIn*dt)){
+      if(o.state==='toCPU'){o.state='dwell';o.dwell=0.22;}
+      else{const c=cells[o.cell];c.flash=1;c.fcol='write';inCount++;storedLevel++;inWin.push(simTime);inbound.splice(i,1);continue;}
+    }
+    o.trail.push({x:o.x,y:o.y});if(o.trail.length>16)o.trail.shift();
+  }
+
+  for(const c of cells)if(c.flash>0)c.flash=Math.max(0,c.flash-dt*1.8);
+  const cut=simTime-2;while(doneWindow.length&&doneWindow[0]<cut)doneWindow.shift();
+  const c1=simTime-1;
+  while(inWin.length&&inWin[0]<c1)inWin.shift();
+  while(outWin.length&&outWin[0]<c1)outWin.shift();
+  const c2=simTime-2;while(latWin.length&&latWin[0].t<c2)latWin.shift();
+  sampleAcc+=dt;
+  if(sampleAcc>=0.4){sampleAcc-=0.4;
+    const al=latWin.length?latWin.reduce((s,o)=>s+o.lat,0)/latWin.length:0;
+    hist.push({in:inWin.length,out:outWin.length,st:storedLevel,tp:temp,lt:al});
+    if(hist.length>HISTMAX)hist.shift();}
+  hitRate=(mHit+mMiss)?mHit/(mHit+mMiss):0;
+  return{util};
+}
+
+// ---- render ----
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+let COL={};
+function cacheColors(){COL={l1:css('--l1'),l2:css('--l2'),deep:css('--deep'),hit:css('--hit'),miss:css('--miss'),
+  write:css('--write'),ink:css('--ink'),dim:css('--dim'),accent:css('--accent'),cpu:css('--cpu'),io:css('--io'),pf:css('--pf')};}
+function hexA(hex,a){hex=hex.replace('#','');if(hex.length===3)hex=hex.split('').map(c=>c+c).join('');
+  const n=parseInt(hex,16);return`rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;}
+function roundRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+function block(r,col,label,sub){
+  ctx.fillStyle=hexA(col,0.10);roundRect(r.x,r.y,r.w,r.h,6);ctx.fill();
+  ctx.strokeStyle=hexA(col,0.6);ctx.lineWidth=1.4;roundRect(r.x,r.y,r.w,r.h,6);ctx.stroke();
+  ctx.fillStyle=hexA(col,0.95);ctx.textAlign='center';
+  ctx.font='700 11px sans-serif';ctx.fillText(label,r.x+r.w/2,r.y+r.h/2-1);
+  if(sub){ctx.fillStyle=COL.dim;ctx.font='9px sans-serif';ctx.fillText(sub,r.x+r.w/2,r.y+r.h/2+13);}
+}
+function vlabel(x,y,text,col){ctx.save();ctx.translate(x,y);ctx.rotate(-Math.PI/2);
+  ctx.fillStyle=col;ctx.font='700 10px sans-serif';ctx.textAlign='left';ctx.fillText(text,0,0);ctx.restore();}
+function drawTrail(o,col){ctx.strokeStyle=hexA(col,0.45);ctx.lineWidth=1.6;ctx.beginPath();
+  for(let i=0;i<o.trail.length;i++){const t=o.trail[i];i?ctx.lineTo(t.x,t.y):ctx.moveTo(t.x,t.y);}ctx.stroke();}
+
+function render(util){
+  ctx.clearRect(0,0,W,H);ctx.fillStyle=css('--bg');ctx.fillRect(0,0,W,H);
+
+  // package substrate (die) enclosing logic gutter + memory
+  const padL=cpuRect.x-14;
+  ctx.fillStyle='rgba(14,22,34,.45)';ctx.strokeStyle='rgba(90,130,180,.4)';ctx.lineWidth=1.5;
+  const bev=16,px0=padL,py0=box.y-14,px1=box.x+box.w+12,py1=box.y+box.h+14;
+  ctx.beginPath();ctx.moveTo(px0+bev,py0);ctx.lineTo(px1,py0);ctx.lineTo(px1,py1);
+  ctx.lineTo(px0,py1);ctx.lineTo(px0,py0+bev);ctx.closePath();ctx.fill();ctx.stroke();
+  ctx.fillStyle=COL.dim;ctx.font='9px sans-serif';ctx.textAlign='left';ctx.fillText('WAREHOUSE DIE',px0+6,py0-6);
+
+  // memory regions (vertical cache stripes)
+  const{l1,l2}=bandCols();
+  const stripes=[{col:COL.l1,c0:0,c1:l1,lab:'L1 · フォワードピック'},
+                 {col:COL.l2,c0:l1,c1:l1+l2,lab:'L2 · リザーブ棚'},
+                 {col:COL.deep,c0:l1+l2,c1:COLS,lab:'DEEP · オーバーフロー'}];
+  for(const s of stripes){if(s.c1<=s.c0)continue;
+    const rx=box.x+s.c0*box.cw,rw=(s.c1-s.c0)*box.cw;
+    ctx.fillStyle=hexA(s.col,0.06);ctx.fillRect(rx,box.y,rw,box.h);
+    ctx.strokeStyle=hexA(s.col,0.28);ctx.lineWidth=1;ctx.strokeRect(rx+1,box.y+1,rw-2,box.h-2);
+    vlabel(rx+14,box.y+box.h-8,s.lab,hexA(s.col,0.85));}
+
+  // memory cells
+  for(const c of cells){const cx=sx(c.gx),cy=sy(c.gy);
+    const col=c.band===0?COL.l1:c.band===1?COL.l2:COL.deep;
+    const a=c.band===0?0.40:c.band===1?0.22:0.11;
+    ctx.fillStyle=hexA(col,a);roundRect(cx-box.cw*0.36,cy-box.cw*0.36,box.cw*0.72,box.cw*0.72,2);ctx.fill();}
+
+  // flashes
+  ctx.save();ctx.globalCompositeOperation='lighter';
+  for(const c of cells){if(c.flash<=0)continue;const cx=sx(c.gx),cy=sy(c.gy);
+    const col=c.fcol==='hit'?COL.hit:c.fcol==='miss'?COL.miss:c.fcol==='pf'?COL.pf:COL.write;
+    ctx.shadowColor=col;ctx.shadowBlur=14*c.flash;ctx.fillStyle=hexA(col,0.85*c.flash);
+    roundRect(cx-box.cw*0.42,cy-box.cw*0.42,box.cw*0.84,box.cw*0.84,2);ctx.fill();}
+  ctx.restore();
+
+  // BUS (shared channel) with flowing ticks — reddens when congested
+  const congested=gBus.on>gBus.cap, bc=congested?COL.miss:COL.accent;
+  ctx.strokeStyle=hexA(bc,congested?0.8:0.5);ctx.lineWidth=congested?3:2;
+  ctx.beginPath();ctx.moveTo(busX,busTop);ctx.lineTo(busX,busBot);ctx.stroke();
+  ctx.save();ctx.globalCompositeOperation='lighter';ctx.fillStyle=hexA(bc,0.55);
+  const off=(simTime*40)% 18;
+  for(let y=busTop+off;y<busBot;y+=18)ctx.fillRect(busX-1.5,y,3,7);
+  ctx.restore();
+  // spurs from blocks to bus
+  ctx.strokeStyle=hexA(COL.dim,0.5);ctx.lineWidth=1;
+  for(const pt of [cpuPort,ioInPort,ioOutPort]){ctx.beginPath();ctx.moveTo(pt.x,pt.y);ctx.lineTo(cpuRect.x+cpuRect.w,pt.y);ctx.stroke();}
+
+  // logic blocks
+  block(ioInRect,COL.io,'I/O IN','入庫 受信');
+  block(ioOutRect,COL.io,'I/O OUT','出庫 送信');
+  block(cpuRect,COL.cpu,'CPU','選定/順序指示');
+  ctx.fillStyle=hexA(bc,0.85);ctx.font='9px sans-serif';ctx.textAlign='center';
+  ctx.fillText('BUS 搬送 '+gBus.on+'/'+gBus.cap+(congested?' ⚠混雑':''),busX,busTop-6);
+
+  // inbound writes (white packets)
+  ctx.save();ctx.globalCompositeOperation='lighter';
+  for(const o of inbound){drawTrail(o,COL.write);
+    ctx.shadowColor=COL.write;ctx.shadowBlur=8;ctx.fillStyle=COL.write;
+    ctx.beginPath();ctx.arc(o.x,o.y,2.6,0,7);ctx.fill();}
+  ctx.restore();
+
+  // outbound pickers (gold going / cyan returning-shipping)
+  ctx.save();ctx.globalCompositeOperation='lighter';
+  for(const p of pickers){if(p.state==='idle')continue;
+    const tc=p.state==='toShelf'?COL.accent:(p.state==='pfSrc'||p.state==='pfDst')?COL.pf:COL.l1;drawTrail(p,tc);
+    ctx.shadowColor=tc;ctx.shadowBlur=12;ctx.fillStyle=tc;
+    ctx.beginPath();ctx.arc(p.x,p.y,3.4,0,7);ctx.fill();}
+  ctx.restore();
+
+  // instruction queue pips (waiting picks near CPU)
+  const qn=Math.min(queue.length,40);
+  for(let i=0;i<qn;i++)ctx.fillStyle=hexA(COL.miss,0.4+0.6*Math.min(1,queue.length/60)),
+    ctx.fillRect(cpuRect.x+2+ (i%20)*4.4, cpuRect.y-8-(i<20?0:6), 3.4,5);
+  if(queue.length){ctx.fillStyle=COL.dim;ctx.font='9px sans-serif';ctx.textAlign='left';
+    ctx.fillText('queue '+queue.length,cpuRect.x,cpuRect.y-16);}
+}
+
+// ---- time-series graph ----
+const gcv=document.getElementById('gcv'),gctx=gcv.getContext('2d');
+const GW=260,GH=110;
+function resizeGraph(){gcv.width=GW*DPR;gcv.height=GH*DPR;gctx.setTransform(DPR,0,0,DPR,0,0);}
+function drawGraph(){
+  gctx.clearRect(0,0,GW,GH);
+  gctx.strokeStyle='rgba(90,130,180,.15)';gctx.lineWidth=1;
+  for(let i=0;i<=3;i++){const y=5+i*(GH-10)/3;gctx.beginPath();gctx.moveTo(0,y);gctx.lineTo(GW,y);gctx.stroke();}
+  if(hist.length<2)return;
+  let maxR=1,maxS=1;
+  for(const h of hist){maxR=Math.max(maxR,h.in,h.out);maxS=Math.max(maxS,h.st);}
+  const pad=4, X=i=>pad+i*(GW-2*pad)/(HISTMAX-1);
+  // 保管 = filled area (own scale)
+  gctx.fillStyle=hexA(COL.deep,.16);gctx.beginPath();gctx.moveTo(X(0),GH-pad);
+  for(let i=0;i<hist.length;i++)gctx.lineTo(X(i),GH-pad-(hist[i].st/maxS)*(GH-2*pad));
+  gctx.lineTo(X(hist.length-1),GH-pad);gctx.closePath();gctx.fill();
+  const line=(key,max,col,dash)=>{gctx.strokeStyle=col;gctx.lineWidth=1.6;gctx.setLineDash(dash||[]);gctx.beginPath();
+    for(let i=0;i<hist.length;i++){const x=X(i),y=GH-pad-(hist[i][key]/max)*(GH-2*pad);i?gctx.lineTo(x,y):gctx.moveTo(x,y);}gctx.stroke();gctx.setLineDash([]);};
+  let maxL=1;for(const h of hist)maxL=Math.max(maxL,h.lt);
+  line('st',maxS,hexA(COL.deep,.85));
+  line('tp',120,COL.cpu,[3,3]);
+  line('lt',maxL,hexA(COL.ink,.7),[2,2]);
+  line('in',maxR,COL.io);
+  line('out',maxR,COL.accent);
+}
+
+// ---- loop ----
+let last=performance.now();
+function frame(now){let dt=(now-last)/1000;last=now;if(dt>0.05)dt=0.05;
+  const{util}=step(dt);render(util);drawGraph();
+  set('m_hit',(hitRate*100).toFixed(0));
+  set('m_lat',latCount?(latSum/latCount).toFixed(2):'0.00');
+  set('m_thr',(doneWindow.length/2).toFixed(1));
+  set('m_q',queue.length);set('m_util',(util*100).toFixed(0));
+  set('g_in',inWin.length);set('g_out',outWin.length);set('g_st',storedLevel);
+  set('g_tp',temp.toFixed(0));
+  set('g_lt',(latWin.length?latWin.reduce((s,o)=>s+o.lat,0)/latWin.length:0).toFixed(2));
+  const bel=document.getElementById('m_bus');bel.textContent=gBus.on+'/'+gBus.cap;
+  bel.style.color=gBus.on>gBus.cap?css('--miss'):css('--ink');
+  const t=document.getElementById('m_temp');t.textContent=temp.toFixed(0);
+  t.style.color=temp>85?css('--miss'):temp>65?css('--accent'):css('--ink');
+  requestAnimationFrame(frame);}
+function set(id,v){document.getElementById(id).textContent=v;}
+
+// ---- layout ----
+function resize(){
+  W=window.innerWidth;H=window.innerHeight;cv.style.width=W+'px';cv.style.height=H+'px';
+  cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+  const padT=86,padB=104,padL=180,padR=48;
+  const availW=W-padL-padR,availH=H-padT-padB;
+  const cw=Math.max(6,Math.min(availW/COLS,availH/ROWS));
+  const gw=cw*COLS,gh=cw*ROWS;
+  const gx=padL,gy=padT+(availH-gh)/2;
+  box={x:gx,y:gy,w:gw,h:gh,cw};
+  busX=gx-22;busTop=gy;busBot=gy+gh;
+  const boxW=100,boxX=busX-14-boxW,ioH=42,cpuH=76;
+  cpuPort={x:busX,y:gy+gh/2};ioInPort={x:busX,y:gy+ioH/2};ioOutPort={x:busX,y:gy+gh-ioH/2};
+  cpuRect={x:boxX,y:gy+gh/2-cpuH/2,w:boxW,h:cpuH};
+  ioInRect={x:boxX,y:gy,w:boxW,h:ioH};
+  ioOutRect={x:boxX,y:gy+gh-ioH,w:boxW,h:ioH};
+  cacheColors();
+  // keep pickers parked at cpu if idle
+  for(const p of pickers)if(p.state==='idle'){p.x=cpuPort.x;p.y=cpuPort.y;}
+}
+window.addEventListener('resize',resize);
+
+// ---- controls ----
+function bind(id,vid,fn,fmt){const s=document.getElementById(id),v=document.getElementById(vid);
+  const u=()=>{fn(+s.value);v.textContent=fmt(+s.value);};s.addEventListener('input',u);u();}
+bind('s_rate','v_rate',x=>cfg.rate=x,x=>x);
+bind('s_cores','v_cores',x=>{cfg.cores=x;setCores(x);},x=>x);
+bind('s_l1','v_l1',x=>{cfg.l1cols=x;markBands();},x=>x+' 列');
+bind('s_slot','v_slot',x=>{cfg.slot=x/100;reslot();},x=>x+'%');
+bind('s_bus','v_bus',x=>gBus.cap=x,x=>x);
+bind('s_pf','v_pf',x=>cfg.prefetch=x/100,x=>x+'%');
+
+// ---- boot ----
+cacheColors();resize();resizeGraph();initGrid();setCores(cfg.cores);resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
