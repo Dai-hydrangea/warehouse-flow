@@ -587,7 +587,7 @@ let last=performance.now();
 function frame(now){
  try{
   let dt=(now-last)/1000;last=now;if(dt>0.05)dt=0.05;
-  dt*=cfg.speed/14*8;                    // time-speed (simTimeは分。1日=1440分を既定~60秒で回す)
+  dt*=cfg.speed/14*0.8;                  // time-speed (既定×1.0を従来の0.1倍に=ゆっくり。1日~10分)
   step(dt);render();drawGraph();
   set('m_clock',String(Math.floor(simTime/60)%24).padStart(2,'0')+':'+String(Math.floor(simTime)%60).padStart(2,'0'));
   set('m_in',inWin.length);set('m_out',outWin.length);set('m_store',storedLevel);set('m_ord',orderQueue);
